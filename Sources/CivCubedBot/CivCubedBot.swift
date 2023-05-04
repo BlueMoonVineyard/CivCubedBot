@@ -28,13 +28,26 @@ class DiscordInteraction {
 }
 
 final class Entry: Model {
-    static let schema = "allowlist"
+    static let schema = "allowlist_entries"
 
     @ID(custom: .id)
     var id: UInt64?
 
     @Field(key: "minecraft_username")
     var minecraftUsername: String
+}
+
+struct CreateEntry: AsyncMigration {
+    func prepare(on database: Database) async throws {
+        try await database.schema("allowlist_entries")
+            .field("id", .uint64, .required)
+            .unique(on: "id", name: "unique_id")
+            .field("minecraft_username", .string, .required)
+            .create()
+    }
+    func revert(on database: Database) async throws {
+        try await database.schema("allowlist_entries").delete()
+    }
 }
 
 class Bot {
@@ -123,6 +136,17 @@ struct CivCubedBotMain {
         let db = dbs.database(logger: Logger.init(label: "databases"), on: httpClient.eventLoopGroup.next())!
         dbs.default(to: .sqlite)
 
+        let migrations = Migrations()
+        migrations.add(CreateEntry())
+        let migrator = Migrator(databases: dbs, migrations: migrations, logger: Logger.init(label: "migrator"), on: httpClient.eventLoopGroup.next())
+        do {
+            try await migrator.setupIfNeeded().get()
+            try await migrator.prepareBatch().get()
+        } catch {
+            Logger(label: "migrations").error("migrations failed!")
+            Logger(label: "migrations").error("\(error)")
+            return
+        }
         let mappoBot = Bot(client: bot.client, cache: cache, ev: httpClient.eventLoopGroup.next(), db: db)
 
         await bot.connect()
