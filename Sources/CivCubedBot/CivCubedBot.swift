@@ -97,13 +97,13 @@ class Bot {
             if let entry = try await Entry.find(UInt64(user.id.value), on: db) {
                 entry.minecraftUsername = username
                 try await entry.save(on: db)
-                try await intr.reply(with: "Your username has been updated!", epheremal: true)
+                try await intr.reply(with: "Your username has been updated!", epheremal: false)
             } else {
                 let entry = Entry()
                 entry.id = UInt64(user.id.value)
                 entry.minecraftUsername = username
                 try await entry.save(on: db)
-                try await intr.reply(with: "Your username has been recorded!", epheremal: true)
+                try await intr.reply(with: "Your username has been recorded!", epheremal: false)
             }
         default:
             break
