@@ -52,12 +52,14 @@ struct CreateEntry: AsyncMigration {
 
 class Bot {
     let client: any DiscordClient
+    let httpClient: HTTPClient
     let cache: DiscordCache
     let ev: any EventLoop
     let db: Database
 
-    init(client: any DiscordClient, cache: DiscordCache, ev: any EventLoop, db: Database) {
+    init(client: any DiscordClient, httpClient: HTTPClient, cache: DiscordCache, ev: any EventLoop, db: Database) {
         self.client = client
+        self.httpClient = httpClient
         self.cache = cache
         self.ev = ev
         self.db = db
@@ -82,6 +84,21 @@ class Bot {
             break
         }
     }
+    func verifyUsername(username: String) async throws -> Bool {
+        let resp = try await httpClient.get(url: "https://api.mojang.com/users/profiles/minecraft/\(username)").get()
+        struct Resp: Codable {
+            let id: String
+        }
+        guard
+            var body = resp.body,
+            let data = body.readData(length: body.readableBytes),
+            let profile = try? JSONDecoder().decode(Resp.self, from: data)
+        else {
+            return false
+        }
+        _ = profile
+        return true
+    }
     func slashCommand(cmd: String, user: DiscordUser, opts: [Interaction.ApplicationCommand.Option]?, intr: DiscordInteraction) async throws {
         switch cmd {
         case "allowlist":
@@ -94,16 +111,21 @@ class Bot {
                 return
             }
 
+            guard try await verifyUsername(username: username) else {
+                try await intr.reply(with: "That username doesn't look valid...", epheremal: true)
+                return
+            }
+
             if let entry = try await Entry.find(UInt64(user.id.value), on: db) {
                 entry.minecraftUsername = username
                 try await entry.save(on: db)
-                try await intr.reply(with: "Your username has been updated!", epheremal: false)
+                try await intr.reply(with: "Your username has been updated! You are \(username)!", epheremal: false)
             } else {
                 let entry = Entry()
                 entry.id = UInt64(user.id.value)
                 entry.minecraftUsername = username
                 try await entry.save(on: db)
-                try await intr.reply(with: "Your username has been recorded!", epheremal: false)
+                try await intr.reply(with: "Your username has been recorded! You are now \(username)!", epheremal: false)
             }
         default:
             break
@@ -147,7 +169,7 @@ struct CivCubedBotMain {
             Logger(label: "migrations").error("\(error)")
             return
         }
-        let mappoBot = Bot(client: bot.client, cache: cache, ev: httpClient.eventLoopGroup.next(), db: db)
+        let mappoBot = Bot(client: bot.client, httpClient: httpClient, cache: cache, ev: httpClient.eventLoopGroup.next(), db: db)
 
         await bot.connect()
         let stream = await bot.makeEventsStream()
