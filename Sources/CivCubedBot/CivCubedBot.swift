@@ -116,13 +116,13 @@ class Bot {
                 return
             }
 
-            if let entry = try await Entry.find(UInt64(user.id.value), on: db) {
+            if let entry = try await Entry.find(UInt64(user.id.rawValue), on: db) {
                 entry.minecraftUsername = username
                 try await entry.save(on: db)
                 try await intr.reply(with: "Your username has been updated! You are \(username)!", epheremal: false)
             } else {
                 let entry = Entry()
-                entry.id = UInt64(user.id.value)
+                entry.id = UInt64(user.id.rawValue)
                 entry.minecraftUsername = username
                 try await entry.save(on: db)
                 try await intr.reply(with: "Your username has been recorded! You are now \(username)!", epheremal: false)
@@ -138,7 +138,7 @@ struct CivCubedBotMain {
     static func actualMain(client httpClient: HTTPClient) async {
         let config = try! JSONDecoder().decode(Config.self,  from: try! String(contentsOfFile: "config.json").data(using: .utf8)!)
 
-        let bot = BotGatewayManager(
+        let bot = await BotGatewayManager(
             eventLoopGroup: httpClient.eventLoopGroup,
             httpClient: httpClient,
             token: config.token,
@@ -182,7 +182,7 @@ struct CivCubedBotMain {
         }
     }
     static func main() {
-        let httpClient = HTTPClient(eventLoopGroupProvider: .createNew)
+        let httpClient = HTTPClient(eventLoopGroupProvider: .singleton)
         try! httpClient.eventLoopGroup.makeFutureWithTask {
             await actualMain(client: httpClient)
         }.wait()
